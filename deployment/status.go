@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,8 +93,7 @@ func waitDeploymentUpdate(cs *kubernetes.Clientset, ns, app string, t int) error
 		}
 
 		if i == t {
-			log.Printf("等待 %d 秒 Deployment = %s 没有更新成功，程序退出!!\n请手动清理产生的临时 deployment", t, app)
-			os.Exit(1)
+			return fmt.Errorf("等待 %d 秒 Deployment = %s 没有更新成功，程序退出!!\n请手动清理产生的临时 deployment", t, app)
 		}
 	}
 	return nil
