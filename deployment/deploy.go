@@ -37,9 +37,6 @@ type DeploySpec struct {
 	LimitMem     string
 }
 
-// var srcDeploy = &appsv1.Deployment{}
-// var svc = &corev1.Service{}
-
 func NewDeploy(client *kubernetes.Clientset) *DeploySpec {
 
 	return &DeploySpec{
