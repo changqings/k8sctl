@@ -118,8 +118,8 @@ func main() {
 								ImageTag:     ctx.String("tag"),
 								Replicas:     int32(ctx.Int("replicas")),
 							}
-							if err := d.Copy(); err != nil {
-								log.Printf("Copy run get err: %v", err)
+							if err := d.CreateNew(); err != nil {
+								log.Printf("create new deploy  get err: %v", err)
 								return err
 							}
 							return nil

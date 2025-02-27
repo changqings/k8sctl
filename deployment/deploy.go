@@ -37,8 +37,8 @@ type DeploySpec struct {
 	LimitMem     string
 }
 
-var srcDeploy = &appsv1.Deployment{}
-var svc = &corev1.Service{}
+// var srcDeploy = &appsv1.Deployment{}
+// var svc = &corev1.Service{}
 
 func NewDeploy(client *kubernetes.Clientset) *DeploySpec {
 
@@ -96,6 +96,7 @@ func (d *DeploySpec) UpdateRequests() error {
 
 func (d *DeploySpec) UpdateLabel() error {
 	log := d.NewBackupLogger()
+	svc := &corev1.Service{}
 
 	deployUpdateLabels := make(map[string]string)
 	serviceUpdateLabels := make(map[string]string)
@@ -340,7 +341,7 @@ func (d *DeploySpec) UpdateLabel() error {
 	return nil
 }
 
-func (d *DeploySpec) Copy() error {
+func (d *DeploySpec) CreateNew() error {
 	// copy service
 	log.Println("Copy Service ...")
 	oriService := d.GetSvc(d.Name, d.Namespace)
@@ -362,7 +363,7 @@ func (d *DeploySpec) Copy() error {
 
 	// copy deployment
 	log.Println("Copy Deployment ...")
-	srcDeploy = d.getDeploy(d.Name, d.Namespace)
+	srcDeploy := d.getDeploy(d.Name, d.Namespace)
 
 	if srcDeploy == nil {
 		return fmt.Errorf("在命名空间= %s 没有发现服务= %s, 请先部署到命名空间 %s,再重试", d.Namespace, d.Name, d.Namespace)
