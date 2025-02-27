@@ -461,13 +461,13 @@ func (d *Deploy) createTmpDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deploymen
 	oriDeployDeep.Name = d.Name + "-tmp"
 	oriDeployDeep.ResourceVersion = ""
 
-	oriDeployDeep = d.addPrestop(oriDeploy)
-	if oriDeploy == nil {
+	deploy := d.addPrestop(oriDeployDeep)
+	if deploy == nil {
 		log.Printf("Create Tmp Deployment with preStop err, please check")
 		return nil
 	}
 
-	tmpDeploy, err := d.Client.AppsV1().Deployments(d.Namespace).Create(context.TODO(), oriDeployDeep, metav1.CreateOptions{})
+	tmpDeploy, err := d.Client.AppsV1().Deployments(d.Namespace).Create(context.TODO(), deploy, metav1.CreateOptions{})
 	if err != nil {
 		log.Printf("创建 deployment = %s, namespace = %s 将执行重建临时 deployment, err = %v", oriDeployDeep.Name, d.Namespace, err)
 		_ = d.Client.AppsV1().Deployments(d.Namespace).Delete(context.TODO(), oriDeployDeep.Name, metav1.DeleteOptions{})
