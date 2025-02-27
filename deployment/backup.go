@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func (d *Deploy) BackupDeploy() {
+func (d *DeploySpec) BackupToLocal() {
 
 	deploy, err := d.Client.AppsV1().Deployments(d.Namespace).Get(context.TODO(), d.Name, metav1.GetOptions{})
 
@@ -85,7 +85,7 @@ func (d *Deploy) BackupDeploy() {
 
 }
 
-func (d *Deploy) NewBackupLogger() *log.Logger {
+func (d *DeploySpec) NewBackupLogger() *log.Logger {
 	newLog := new(log.Logger)
 	backupPath, err := utils.GetBackupPath()
 	if err != nil {

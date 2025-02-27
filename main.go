@@ -39,12 +39,15 @@ func main() {
 						Action: func(ctx *cli.Context) error {
 
 							ns := ctx.String("namespace")
-							cs := k8scrdClient.GetClient()
+							cs, err := k8scrdClient.NewClient()
+							if err != nil {
+								return err
+							}
 
 							if ns == "" || ns == "all" {
 								ns = "all"
 							}
-							m, err := deployment.GetUnhealthyPods(cs, ns)
+							m, err := deployment.GetUnhealthyPods(cs.KubeClient, ns)
 							if err != nil {
 								return err
 							}
@@ -103,8 +106,12 @@ func main() {
 						},
 						Action: func(ctx *cli.Context) error {
 							fmt.Printf("Copy deployment and service: %s from: %s to: %s %s\n", ctx.String("name"), ctx.String("from"), ctx.String("to"), ctx.String("tag"))
-							d := &deployment.Deploy{
-								Client:       k8scrdClient.GetClient(),
+							client, err := k8scrdClient.NewClient()
+							if err != nil {
+								log.Printf("NewClient get err: %v", err)
+							}
+							d := &deployment.DeploySpec{
+								Client:       client.KubeClient,
 								Name:         ctx.String("name"),
 								Namespace:    ctx.String("from"),
 								NewNamespace: ctx.String("to"),
@@ -168,8 +175,13 @@ func main() {
 							},
 						},
 						Action: func(ctx *cli.Context) error {
+							client, err := k8scrdClient.NewClient()
+							if err != nil {
+								return err
+							}
+
 							c := &cronjob.CronJob{
-								Client:    k8scrdClient.GetClient(),
+								Client:    client.KubeClient,
 								Name:      ctx.String("name"),
 								Namespace: ctx.String("namespace"),
 								Type:      ctx.String("type"),
@@ -266,8 +278,14 @@ func main() {
 							},
 						},
 						Action: func(ctx *cli.Context) error {
-							d := &deployment.Deploy{
-								Client:    k8scrdClient.GetClient(),
+							client, err := k8scrdClient.NewClient()
+							if err != nil {
+								return err
+
+							}
+
+							d := &deployment.DeploySpec{
+								Client:    client.KubeClient,
 								Name:      ctx.String("name"),
 								Namespace: ctx.String("namespace"),
 								Type:      ctx.String("type"),
@@ -303,7 +321,7 @@ func main() {
 								d.Confirm = "true"
 							}
 
-							if err := d.UpdateDeployLabels(); err != nil {
+							if err := d.UpdateLabel(); err != nil {
 								log.Printf("Cli exec update labels err")
 								return err
 							}
@@ -336,8 +354,12 @@ func main() {
 							},
 						},
 						Action: func(ctx *cli.Context) error {
-							d := &deployment.Deploy{
-								Client:       k8scrdClient.GetClient(),
+							client, err := k8scrdClient.NewClient()
+							if err != nil {
+								return err
+							}
+							d := &deployment.DeploySpec{
+								Client:       client.KubeClient,
 								Name:         ctx.String("name"),
 								NewNamespace: ctx.String("namespace"),
 							}

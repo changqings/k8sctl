@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"time"
 
-	k8scrdClient "github.com/changqings/k8scrd/client"
 	"k8s.io/api/batch/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -26,9 +25,10 @@ type CronJob struct {
 	Type      string
 }
 
-func NewClient() *CronJob {
+func NewClient(client *kubernetes.Clientset) *CronJob {
+
 	return &CronJob{
-		Client: k8scrdClient.GetClient(),
+		Client: client,
 	}
 }
 
@@ -87,18 +87,18 @@ func (c *CronJob) UpdateCronjobLabels() error {
 		log.Printf("要修改的 Cronjob 的标签和原标签完全一样，程序退出！！")
 		os.Exit(0)
 	}
-	log.Printf("是否确认执行？[输入 y|Y 继续, Ctrl^C 退出（回车确认输入）]: ")
+	log.Printf("是否确认执行？输入 [ y|Y ] 继续, Ctrl^C 退出（回车确认输入）: ")
 
 	if c.Confirm == "" {
 		var execConfirm string
 		for {
-			fmt.Printf("请输入确认[y|Y]: ")
+			fmt.Printf("请输入确认[ y|Y ]: ")
 			stdin := bufio.NewReader(os.Stdin)
 			_, err := fmt.Fscan(stdin, &execConfirm)
 			stdin.ReadString('\n')
 			if err != nil {
 				fmt.Println(err)
-				log.Printf("输入的字符 = %v, 请重新输入", execConfirm)
+				log.Printf("你输入的字符 = %v, 请重新输入!!", execConfirm)
 				continue
 			}
 			if execConfirm != "y" && execConfirm != "Y" {
@@ -134,7 +134,7 @@ func (c *CronJob) UpdateCronjobLabels() error {
 		log.Printf("第 %d 次尝试更新标签失败，将在 1s 后重试", i)
 		time.Sleep(timeSleep)
 		if i == tryTimes {
-			log.Panicf("重试 %d 后，更新 cronjob = %s.%s 失败，请联系维护人员。\n", tryTimes, c.Name, c.Namespace)
+			log.Panicf("重试 %d 后，更新 cronjob = %s.%s 失败，请联系运维人员。\n", tryTimes, c.Name, c.Namespace)
 			os.Exit(1)
 		}
 	}

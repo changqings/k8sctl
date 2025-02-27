@@ -12,7 +12,7 @@ import (
 func GetUnhealthyPods(cs *kubernetes.Clientset, ns string) (map[string]int, error) {
 
 	if ns == "all" {
-		ns = ""
+		ns = metav1.NamespaceAll
 	}
 
 	// if check map empty, use len(podMap) == 0

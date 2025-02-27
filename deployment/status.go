@@ -16,7 +16,7 @@ const (
 	deployRunningCheckInterval = time.Second * 3
 )
 
-func (d *Deploy) waitForPodContainersRunning(ns, app string) error {
+func (d *DeploySpec) WaitForPodContainersRunning(ns, app string) error {
 	end := time.Now().Add(deployRunningThreshold)
 	log.Printf("等待应用 %s 的所有 pod 完成启动", app)
 	for {
@@ -75,10 +75,10 @@ func getPodLabels(clientset *kubernetes.Clientset, ns, app string) string {
 	return labelSelector
 }
 
-func waitDeploymentUpdate(cs *kubernetes.Clientset, ns, app string, t int) error {
-	for i := 0; i <= t; i++ {
+func WaitDeploymentUpdate(cs *kubernetes.Clientset, ns, app string, tiemSecond int) error {
+	for i := 0; i <= tiemSecond; i++ {
 		time.Sleep(time.Second)
-		if i%20 == 0 {
+		if i%10 == 0 {
 			d, err := cs.AppsV1().Deployments(ns).Get(context.TODO(), app, metav1.GetOptions{})
 			if err != nil {
 				log.Printf("Wait for update cann't get deployment, err: %v", err)
@@ -92,8 +92,8 @@ func waitDeploymentUpdate(cs *kubernetes.Clientset, ns, app string, t int) error
 			}
 		}
 
-		if i == t {
-			return fmt.Errorf("等待 %d 秒 Deployment = %s 没有更新成功，程序退出!!\n请手动清理产生的临时 deployment", t, app)
+		if i == tiemSecond {
+			return fmt.Errorf("等待 %d 秒 Deployment = %s 没有更新成功，程序退出!!\n请手动清理产生的临时 deployment", tiemSecond, app)
 		}
 	}
 	return nil

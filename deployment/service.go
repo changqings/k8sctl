@@ -10,7 +10,7 @@ import (
 
 var dryRun []string
 
-func (d *Deploy) getSvc(name, ns string) *corev1.Service {
+func (d *DeploySpec) GetSvc(name, ns string) *corev1.Service {
 	svc, err := d.Client.CoreV1().Services(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("INFO: Service = %s, namespace = %s not found.\n", name, ns)
@@ -20,7 +20,7 @@ func (d *Deploy) getSvc(name, ns string) *corev1.Service {
 
 }
 
-func (d *Deploy) DeleteNewSvc() bool {
+func (d *DeploySpec) DeleteNewSvc() bool {
 	dryRun = append(dryRun, "All")
 
 	err := d.Client.CoreV1().Services(d.NewNamespace).Delete(context.TODO(), d.Name, metav1.DeleteOptions{
@@ -38,7 +38,7 @@ func (d *Deploy) DeleteNewSvc() bool {
 	return true
 }
 
-func (d *Deploy) createNewSvc(oriService *corev1.Service) *corev1.Service {
+func (d *DeploySpec) CreateNewSvc(oriService *corev1.Service) *corev1.Service {
 
 	oriServiceDeep := oriService.DeepCopy()
 	oriServiceDeep.Namespace = d.NewNamespace

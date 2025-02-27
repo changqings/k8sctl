@@ -3,6 +3,7 @@ package deployment
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"k8sctl/utils"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	k8scrdClient "github.com/changqings/k8scrd/client"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type Deploy struct {
+type DeploySpec struct {
 	Client       *kubernetes.Clientset
 	Name         string
 	Namespace    string
@@ -40,20 +40,20 @@ type Deploy struct {
 var srcDeploy = &appsv1.Deployment{}
 var svc = &corev1.Service{}
 
-func NewDeploy() *Deploy {
-	return &Deploy{
-		Client: k8scrdClient.GetClient(),
+func NewDeploy(client *kubernetes.Clientset) *DeploySpec {
+
+	return &DeploySpec{
+		Client: client,
 	}
 }
 
-func (d *Deploy) UpdateLimits() error {
+func (d *DeploySpec) UpdateLimits() error {
 	deploy, err := d.Client.AppsV1().Deployments(d.Namespace).Get(context.Background(), d.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
 	containers := deploy.Spec.Template.Spec.Containers
-
 	for i := 0; i < len(containers); i++ {
 		containers[i].Resources.Limits = map[corev1.ResourceName]resource.Quantity{
 			corev1.ResourceCPU:    resource.MustParse(d.LimitCpu),
@@ -61,23 +61,22 @@ func (d *Deploy) UpdateLimits() error {
 		}
 	}
 
-	_, err1 := d.Client.AppsV1().Deployments(d.Namespace).Update(context.Background(), deploy, metav1.UpdateOptions{})
-	if err1 != nil {
-		return err1
+	_, err = d.Client.AppsV1().Deployments(d.Namespace).Update(context.Background(), deploy, metav1.UpdateOptions{})
+	if err != nil {
+		return err
 	}
 	log.Printf("Update deployment = %s.%s resources.limits success.\n", d.Name, d.Namespace)
 
 	return nil
 
 }
-func (d *Deploy) UpdateRequests() error {
+func (d *DeploySpec) UpdateRequests() error {
 	deploy, err := d.Client.AppsV1().Deployments(d.Namespace).Get(context.Background(), d.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
 	containers := deploy.Spec.Template.Spec.Containers
-
 	for i := 0; i < len(containers); i++ {
 		containers[i].Resources.Requests = map[corev1.ResourceName]resource.Quantity{
 			corev1.ResourceCPU:    resource.MustParse(d.RequestCpu),
@@ -85,9 +84,9 @@ func (d *Deploy) UpdateRequests() error {
 		}
 	}
 
-	_, err1 := d.Client.AppsV1().Deployments(d.Namespace).Update(context.Background(), deploy, metav1.UpdateOptions{})
-	if err1 != nil {
-		return err1
+	_, err = d.Client.AppsV1().Deployments(d.Namespace).Update(context.Background(), deploy, metav1.UpdateOptions{})
+	if err != nil {
+		return err
 	}
 	log.Printf("Update deployment = %s.%s resources.requests success.\n", d.Name, d.Namespace)
 
@@ -95,13 +94,13 @@ func (d *Deploy) UpdateRequests() error {
 
 }
 
-func (d *Deploy) UpdateDeployLabels() error {
+func (d *DeploySpec) UpdateLabel() error {
 	log := d.NewBackupLogger()
 
 	deployUpdateLabels := make(map[string]string)
 	serviceUpdateLabels := make(map[string]string)
 
-	if d.Labels == "" {
+	if len(d.Labels) == 0 {
 		// stable deployment labels
 		deployUpdateLabels["app"] = d.Name
 		deployUpdateLabels["name"] = d.Name
@@ -125,7 +124,7 @@ func (d *Deploy) UpdateDeployLabels() error {
 		serviceUpdateLabels = utils.StringToMap(d.Labels)
 		if deployUpdateLabels == nil {
 			log.Printf("解析 Lables = %s 失败，请按格式\"app=xx,version=xx\"进行传值", d.Labels)
-			os.Exit(1)
+			return errors.New("解析 Lables 失败, 请按格式\"app=xx,version=xx\"进行传值")
 		}
 		if d.Type == "fe" {
 			delete(serviceUpdateLabels, "version")
@@ -136,11 +135,10 @@ func (d *Deploy) UpdateDeployLabels() error {
 	}
 
 	if d.Type == "api" || d.Type == "fe" {
-		svc = d.getSvc(d.Name, d.Namespace)
-
+		svc = d.GetSvc(d.Name, d.Namespace)
 		if svc == nil {
 			log.Printf("Service = %s not found in namespace = %s, 请检查是否在没有 service 的情况下使用了 --type=api", d.Name, d.Namespace)
-			os.Exit(1)
+			return errors.New("service not found")
 		}
 	}
 
@@ -148,7 +146,7 @@ func (d *Deploy) UpdateDeployLabels() error {
 
 	if oriDeployment == nil {
 		log.Printf("Deployment = %s not found in namesapce = %s", d.Name, d.Namespace)
-		os.Exit(1)
+		return errors.New("deployment not found")
 	}
 
 	log.Printf("开始对 %s.%s 进行标签替换\n, 请确认信息：", d.Namespace, d.Name)
@@ -191,18 +189,18 @@ func (d *Deploy) UpdateDeployLabels() error {
 			return nil
 		}
 	}
-	log.Printf("是否确认执行？[输入 y|Y 继续, Ctrl^C 退出（回车确认输入）]: ")
+	log.Printf("是否确认执行? 请输入 [ y|Y ], Ctrl^C 退出（回车确认输入）: ")
 
 	if d.Confirm == "" {
 		var execConfirm string
 		for {
-			fmt.Printf("请输入确认[y|Y]: ")
+			fmt.Printf("请输入确认 [ y|Y ]: ")
 			stdin := bufio.NewReader(os.Stdin)
 			_, err := fmt.Fscan(stdin, &execConfirm)
 			stdin.ReadString('\n')
 			if err != nil {
 				fmt.Println(err)
-				log.Printf("输入的字符 = %v，请重新输入", execConfirm)
+				log.Printf("你输入的字符 = %v, 请重新输入!!", execConfirm)
 				continue
 			}
 			if execConfirm != "y" && execConfirm != "Y" {
@@ -215,7 +213,7 @@ func (d *Deploy) UpdateDeployLabels() error {
 	}
 
 	// backup deployment.yaml in $HOME/.kube/k8sctl-backups/
-	d.BackupDeploy()
+	d.BackupToLocal()
 
 	// Create tmp Deployment
 	tmpDeployment := d.createTmpDeploy(oriDeployment)
@@ -226,7 +224,7 @@ func (d *Deploy) UpdateDeployLabels() error {
 		os.Exit(1)
 	}
 
-	if err := waitDeploymentUpdate(d.Client, tmpDeployment.Namespace, tmpDeployment.Name, 180); err != nil {
+	if err := WaitDeploymentUpdate(d.Client, tmpDeployment.Namespace, tmpDeployment.Name, 180); err != nil {
 		log.Printf("Tmp deployment = %s started failed, please check.", tmpDeployment.Name)
 		os.Exit(1)
 	}
@@ -265,14 +263,13 @@ func (d *Deploy) UpdateDeployLabels() error {
 		os.Exit(1)
 	}
 
-	errWait := waitDeploymentUpdate(d.Client, d.Namespace, d.Name, 180)
+	errWait := WaitDeploymentUpdate(d.Client, d.Namespace, d.Name, 180)
 	if errWait != nil {
 		log.Printf("Wait pod Running err: %v", errWait)
 	}
 	log.Printf("修改标签完成 Deployment = %s", d.Name)
 
 	// Update svc selector lables
-
 	if d.Type == "api" || d.Type == "fe" {
 		time.Sleep(3 * time.Second)
 		log.Printf("开始更新 Service 标签 = %s", d.Name)
@@ -291,21 +288,21 @@ func (d *Deploy) UpdateDeployLabels() error {
 		log.Printf("标签更新完成 Service = %s ", d.Name)
 
 	} else {
-		log.Printf("你输入的 Type = %s, 类型不是\"api|fe\",跳过更新Service", d.Type)
+		log.Printf(`你输入的 Type = %s, 类型不是[ api|fe ],跳过更新Service`, d.Type)
 	}
 
 	// Delete tmp deployment
-	log.Printf("开始删除临时应用（Deployment） = %s.%s-tmp\n请检查后，确认执行？[输入 y|Y 继续, Ctrl^C 退出（回车确认输入）]: ", d.Namespace, d.Name)
+	log.Printf("开始删除临时应用 Deployment = %s.%s-tmp\n请检查后, 确认执行? 确认请输入 [ y|Y ], Ctrl^C 退出（回车确认输入）: ", d.Namespace, d.Name)
 	if d.Confirm == "" {
 		var delConfirm string
 		for {
-			fmt.Print("请输入确认[y|Y]: ")
+			fmt.Print("请输入确认[ y|Y ]: ")
 			stdin := bufio.NewReader(os.Stdin)
 			_, err := fmt.Fscan(stdin, &delConfirm)
 			stdin.ReadString('\n')
 			if err != nil {
 				fmt.Println(err)
-				log.Printf("输入的字符 = %v，请重新输入", delConfirm)
+				log.Printf("你输入的字符 = %v, 请重新输入!!", delConfirm)
 				continue
 			}
 			if delConfirm != "y" && delConfirm != "Y" {
@@ -343,17 +340,17 @@ func (d *Deploy) UpdateDeployLabels() error {
 	return nil
 }
 
-func (d *Deploy) Copy() error {
+func (d *DeploySpec) Copy() error {
 	// copy service
 	log.Println("Copy Service ...")
-	oriService := d.getSvc(d.Name, d.Namespace)
+	oriService := d.GetSvc(d.Name, d.Namespace)
 
 	if oriService == nil {
-		return fmt.Errorf("在命名空间= %s 没有发现服务= %s, 请先部署到命名空间= %s,再重试", d.Namespace, d.Name, d.Namespace)
+		return fmt.Errorf("在命名空间= %s 没有发现服务= %s, 请先部署到命名空间 %s,再重试", d.Namespace, d.Name, d.Namespace)
 	}
 	log.Printf("Service = %s, namespace = %s has found. Continue ...", d.Name, d.Namespace)
 
-	dstService := d.getSvc(d.Name, d.NewNamespace)
+	dstService := d.GetSvc(d.Name, d.NewNamespace)
 
 	if dstService != nil {
 		log.Printf("Service = %s, namespace = %s has found. Recreating it ...", d.Name, d.NewNamespace)
@@ -361,14 +358,14 @@ func (d *Deploy) Copy() error {
 			log.Println("Delete service failed")
 		}
 	}
-	d.createNewSvc(oriService)
+	d.CreateNewSvc(oriService)
 
 	// copy deployment
 	log.Println("Copy Deployment ...")
 	srcDeploy = d.getDeploy(d.Name, d.Namespace)
 
 	if srcDeploy == nil {
-		return fmt.Errorf("在命名空间= %s 没有发现服务= %s, 请先部署到命名空间= %s,再重试", d.Namespace, d.Name, d.Namespace)
+		return fmt.Errorf("在命名空间= %s 没有发现服务= %s, 请先部署到命名空间 %s,再重试", d.Namespace, d.Name, d.Namespace)
 	}
 	log.Printf("Deployment = %s, namespace = %s has found. Continue ...", d.Name, d.Namespace)
 
@@ -383,7 +380,7 @@ func (d *Deploy) Copy() error {
 	d.createNewDeploy(srcDeploy)
 
 	// waitfor deployment
-	err := d.waitForPodContainersRunning(d.NewNamespace, d.Name)
+	err := WaitDeploymentUpdate(d.Client, d.NewNamespace, d.Name, 180)
 
 	if err != nil {
 		log.Printf("wait for pod running err: %s\n", err)
@@ -394,7 +391,7 @@ func (d *Deploy) Copy() error {
 	return nil
 
 }
-func (d *Deploy) getDeploy(name, ns string) *appsv1.Deployment {
+func (d *DeploySpec) getDeploy(name, ns string) *appsv1.Deployment {
 
 	deploy, err := d.Client.AppsV1().Deployments(ns).Get(context.TODO(), name, metav1.GetOptions{})
 
@@ -407,7 +404,7 @@ func (d *Deploy) getDeploy(name, ns string) *appsv1.Deployment {
 
 }
 
-func (d *Deploy) DeleteNewDeploy() bool {
+func (d *DeploySpec) DeleteNewDeploy() bool {
 	dryRun = append(dryRun, "All")
 
 	err := d.Client.AppsV1().Deployments(d.NewNamespace).Delete(context.TODO(), d.Name, metav1.DeleteOptions{
@@ -430,7 +427,7 @@ func (d *Deploy) DeleteNewDeploy() bool {
 
 }
 
-func (d *Deploy) createNewDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deployment {
+func (d *DeploySpec) createNewDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deployment {
 
 	oriDeployDeep := oriDeploy.DeepCopy()
 	oriDeployDeep.Namespace = d.NewNamespace
@@ -456,7 +453,7 @@ func (d *Deploy) createNewDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deploymen
 	return newDeploy
 }
 
-func (d *Deploy) createTmpDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deployment {
+func (d *DeploySpec) createTmpDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deployment {
 	oriDeployDeep := oriDeploy.DeepCopy()
 	oriDeployDeep.Name = d.Name + "-tmp"
 	oriDeployDeep.ResourceVersion = ""
@@ -481,7 +478,7 @@ func (d *Deploy) createTmpDeploy(oriDeploy *appsv1.Deployment) *appsv1.Deploymen
 	return tmpDeploy
 }
 
-func (d *Deploy) addPrestop(deploy *appsv1.Deployment) *appsv1.Deployment {
+func (d *DeploySpec) addPrestop(deploy *appsv1.Deployment) *appsv1.Deployment {
 
 	preStopCommmand := &corev1.Lifecycle{}
 	appContainerIndex := 0
